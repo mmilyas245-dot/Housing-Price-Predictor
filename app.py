@@ -33,7 +33,7 @@ HTML_TEMPLATE = """
     <div class="chat-box" id="chatBox">
         <div class="message bot-message">
             Hello! Enter all required features separated by commas.<br><br>
-            <b>Order:</b> area, bedrooms, bathrooms, stories, mainroad (1/0), guestroom (1/0), basement (1/0), hotwaterheating (1/0), airconditioning (1/0), parking, prefarea (1/0)
+            <b>Order:</b> area, bedrooms, bathrooms, stories, mainroad (1/0), guestroom (1/0), basement (1/0), hotwaterheating (1/0), airconditioning (1/0), parking, prefarea (1/0),semi-furnished(0/1),unfurnished(0/1)
         </div>
     </div>
     <div class="input-area">
