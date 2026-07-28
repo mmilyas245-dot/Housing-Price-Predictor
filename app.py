@@ -1,13 +1,12 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request
 import joblib
 import numpy as np
 
 app = Flask(__name__)
 
-# Load your trained model
+# Load trained model
 model = joblib.load('housing_model.pkl')
 
-# Simple HTML + CSS + JS Chat Interface
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -32,10 +31,13 @@ HTML_TEMPLATE = """
 <body>
     <div class="header">🏠 Housing Price Predictor AI</div>
     <div class="chat-box" id="chatBox">
-        <div class="message bot-message">Hello! Enter your house details (e.g., area, bedrooms, bathrooms) separated by commas, and I'll predict the price for you.</div>
+        <div class="message bot-message">
+            Hello! Enter all required features separated by commas.<br><br>
+            <b>Order:</b> area, bedrooms, bathrooms, stories, mainroad (1/0), guestroom (1/0), basement (1/0), hotwaterheating (1/0), airconditioning (1/0), parking, prefarea (1/0)
+        </div>
     </div>
     <div class="input-area">
-        <input type="text" id="userInput" placeholder="Type your inputs here (e.g. 2000, 3, 2)..." />
+        <input type="text" id="userInput" placeholder="e.g. 7420, 4, 2, 3, 1, 0, 0, 0, 1, 2, 1" />
         <button onclick="sendMessage()">Send</button>
     </div>
 
@@ -54,12 +56,16 @@ HTML_TEMPLATE = """
             chatBox.appendChild(userDiv);
             inputField.value = '';
 
-            // Scroll down
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
-                // Parse comma-separated inputs into an array of numbers
-                const featuresArray = userText.split(',').map(num => parseFloat(num.trim()));
+                // Map values: Converts "yes"/"no" to 1/0 or parses numbers
+                const featuresArray = userText.split(',').map(val => {
+                    const cleanVal = val.trim().toLowerCase();
+                    if (cleanVal === 'yes') return 1;
+                    if (cleanVal === 'no') return 0;
+                    return parseFloat(cleanVal);
+                });
 
                 const response = await fetch('/predict', {
                     method: 'POST',
@@ -82,7 +88,7 @@ HTML_TEMPLATE = """
             } catch (err) {
                 const botDiv = document.createElement('div');
                 botDiv.className = 'message bot-message';
-                botDiv.textContent = 'Sorry, failed to process request. Check feature inputs!';
+                botDiv.textContent = 'Server communication error. Check your python terminal.';
                 chatBox.appendChild(botDiv);
             }
         }
@@ -91,19 +97,39 @@ HTML_TEMPLATE = """
 </html>
 """
 
+
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE)
+  return render_template_string(HTML_TEMPLATE)
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    try:
-        data = request.get_json()
-        features = np.array([data['features']])
-        prediction = model.predict(features)
-        return jsonify({'predicted_price': round(float(prediction[0]), 2)})
-    except Exception as e:
-        return jsonify({'error': 'Please provide valid numerical inputs matching model features.'}), 400
+  try:
+    data = request.get_json()
+    raw_features = data.get('features', [])
+
+    # Check for NaN values
+    if any(np.isnan(x) for x in raw_features):
+      return (
+          jsonify(
+              {'error': 'Invalid inputs. Ensure all values are numeric or yes/no.'}
+          ),
+          400,
+      )
+
+    # Convert to 2D NumPy array
+    features = np.array([raw_features])
+
+    # Run Prediction
+    prediction = model.predict(features)
+    return jsonify({'predicted_price': round(float(prediction[0]), 2)})
+
+  except Exception as e:
+    # Print real error trace to terminal
+    print('Prediction Exception:', str(e))
+    return jsonify({'error': str(e)}), 400
+
 
 if __name__ == '_main_':
-    app.run()
+  app.run(debug=True)
