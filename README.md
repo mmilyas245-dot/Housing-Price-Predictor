@@ -282,7 +282,7 @@ You are free to use, modify, and distribute this project with proper attribution
 ---
 
 # 👨‍💻 Author
-**Muhammad Waseem**
+**Muhammad Ilyas**
 
 Aspiring AI & Data Science Engineer with a strong interest in Machine Learning, Data Analysis, and Artificial Intelligence.
 
