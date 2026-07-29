@@ -1,6 +1,15 @@
+import os
+import pandas as pd
+from groq import Groq
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template_string, request
 import joblib
 import numpy as np
+
+load_dotenv()
+groq_api_key = os.getenv("GROQ_API_KEY")
+
+client = Groq(api_key=groq_api_key)
 
 app = Flask(__name__)
 
@@ -78,7 +87,11 @@ HTML_TEMPLATE = """
                 botDiv.className = 'message bot-message';
 
                 if (response.ok) {
-                    botDiv.textContent = "Predicted Price: $" + Number(data.predicted_price).toLocaleString();
+                    let output = "<b>Predicted Price:</b> $" + Number(data.predicted_price).toLocaleString();
+                    if (data.ai_explanation) {
+                        output += "<br><br><b>AI Analysis:</b> " + data.ai_explanation;
+                    }
+                    botDiv.innerHTML = output;
                 } else {
                     botDiv.textContent = "Error: " + (data.error || "Execution failed");
                 }
@@ -97,34 +110,66 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# NEW FUNCTION ADDED: Sends features and predicted price to Groq API
+def generate_groq_explanation(raw_features, predicted_price):
+    prompt = f"""
+    You are a professional real estate expert. 
+    Our Machine Learning model predicted a price of ${predicted_price:,.2f} for a house.
+
+    Property Details (raw feature array):
+    {raw_features}
+
+    Task: Write a concise, professional 2-3 sentence real estate summary explaining why this property got this valuation based on key drivers like area, rooms, parking,amenities and last add (best regards M.I team).
+    """
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a helpful and professional real estate consultant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=200
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"Could not generate AI summary. Error: {str(e)}"
+
 
 @app.route('/')
 def home():
-  return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML_TEMPLATE)
 
 
 @app.route('/predict', methods=['POST'])
 def predict():
-  try:
-    data = request.get_json()
-    raw_features = data.get('features', [])
+    try:
+        data = request.get_json()
+        raw_features = data.get('features', [])
 
-    if any(np.isnan(x) for x in raw_features):
-      return (
-          jsonify(
-              {'error': 'Invalid inputs. Ensure all values are numeric or yes/no.'}
-          ),
-          400,
-      )
+        if any(np.isnan(x) for x in raw_features):
+            return (
+                jsonify(
+                    {'error': 'Invalid inputs. Ensure all values are numeric or yes/no.'}
+                ),
+                400,
+            )
 
-    features = np.array([raw_features])
-    prediction = model.predict(features)
+        features = np.array([raw_features])
+        prediction = model.predict(features)
+        predicted_price = round(float(prediction[0]), 2)
 
-    return jsonify({'predicted_price': round(float(prediction[0]), 2)})
+        # Call the new Groq function
+        explanation = generate_groq_explanation(raw_features, predicted_price)
 
-  except Exception as e:
-    return jsonify({'error': str(e)}), 400
+        return jsonify({
+            'predicted_price': predicted_price,
+            'ai_explanation': explanation
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 
-if __name__ == '_main_':
-  app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
